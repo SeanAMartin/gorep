@@ -1,22 +1,5 @@
 package main
 
-//--Summary:
-//  Create a grep clone that can do simple substring searching
-//  within files. It must auto-recurse into subdirectories.
-//
-//--Requirements:
-//* Use goroutines to search through the files for a substring match
-//* Display matches to the terminal as they are found
-//  * Display the line number, file path, and complete line containing the match
-//* Recurse into any subdirectories looking for matches
-//* Use any synchronization method to ensure that all files
-//  are searched, and all results are displayed before the program
-//  terminates.
-//
-//--Notes:
-//* Program invocation should follow the pattern:
-//    mgrep search_string search_dir
-
 import (
 	"fmt"
 	"io/fs"
@@ -107,7 +90,7 @@ func main() {
 		select {
 		case display := <-displayChan:
 			display.PrettyPrint()
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			return
 		}
 	}
