@@ -19,9 +19,11 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,13 +41,11 @@ func (d Display) PrettyPrint() {
 	fmt.Printf("Line Number: %v\nFilePath: %v\nLine: %v\n", d.lineNumber, d.filePath, d.line)
 }
 
-func searchLine(pattern string, line string, lineNumber int) SearchResult {
-	var searchResult SearchResult
+func searchLine(pattern string, line string, lineNumber int) (SearchResult, bool) {
 	if strings.Contains(line, pattern) {
-		searchResult.lineNumber = lineNumber + 1
-		searchResult.line = line
+		return SearchResult{lineNumber: lineNumber + 1, line: line}, true
 	}
-	return searchResult
+	return SearchResult{}, false
 }
 
 func splitIntoLines(file string) []string {
@@ -63,22 +63,42 @@ func fileFromPath(path string) string {
 	return string(fileContent)
 }
 
+func getRecursiveFilePaths(inputDir string) []string {
+	var paths []string
+	err := filepath.Walk(inputDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
+			return err
+		}
+		if !info.IsDir() {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error walking the path %q: %v\n", inputDir, err)
+	}
+	return paths
+}
+
 func main() {
 	pattern := os.Args[1]
-	filePath := os.Args[2]
-	input := fileFromPath(filePath)
-	var displays []Display
-	lines := splitIntoLines(input)
-	fmt.Println(len(lines) - 1)
+	dirPath := os.Args[2]
 
-	for index, line := range lines {
-		searchResult := searchLine(pattern, line, index)
-		if searchResult.lineNumber != 0 {
-			displays = append(displays, Display{filePath, searchResult})
+	paths := getRecursiveFilePaths(dirPath)
+	for _, path := range paths {
+		input := fileFromPath(path)
+		var displays []Display
+		lines := splitIntoLines(input)
+
+		for index, line := range lines {
+			if searchResult, ok := searchLine(pattern, line, index); ok {
+				displays = append(displays, Display{path, searchResult})
+			}
 		}
-	}
 
-	for _, display := range displays {
-		display.PrettyPrint()
+		for _, display := range displays {
+			display.PrettyPrint()
+		}
 	}
 }
