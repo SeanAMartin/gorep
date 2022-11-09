@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type SearchResult struct {
@@ -38,7 +39,7 @@ type Display struct {
 }
 
 func (d Display) PrettyPrint() {
-	fmt.Printf("Line Number: %v\nFilePath: %v\nLine: %v\n", d.lineNumber, d.filePath, d.line)
+	fmt.Printf("Line Number: %v\nFilePath: %v\nLine: %v\n\n", d.lineNumber, d.filePath, d.line)
 }
 
 func searchLine(pattern string, line string, lineNumber int) (SearchResult, bool) {
@@ -81,24 +82,34 @@ func getRecursiveFilePaths(inputDir string) []string {
 	return paths
 }
 
+func routine(dc chan Display, path string, pattern string) {
+	input := fileFromPath(path)
+	lines := splitIntoLines(input)
+	for index, line := range lines {
+		if searchResult, ok := searchLine(pattern, line, index); ok {
+			dc <- Display{path, searchResult}
+		}
+	}
+}
+
 func main() {
 	pattern := os.Args[1]
 	dirPath := os.Args[2]
 
+	displayChan := make(chan Display)
 	paths := getRecursiveFilePaths(dirPath)
+
 	for _, path := range paths {
-		input := fileFromPath(path)
-		var displays []Display
-		lines := splitIntoLines(input)
+		go routine(displayChan, path, pattern)
+	}
 
-		for index, line := range lines {
-			if searchResult, ok := searchLine(pattern, line, index); ok {
-				displays = append(displays, Display{path, searchResult})
-			}
-		}
-
-		for _, display := range displays {
+	for {
+		select {
+		case display := <-displayChan:
 			display.PrettyPrint()
+		case <-time.After(500 * time.Millisecond):
+			return
 		}
 	}
+
 }
