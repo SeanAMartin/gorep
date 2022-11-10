@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+	"sync"
 )
 
 type SearchResult struct {
@@ -65,34 +65,44 @@ func getRecursiveFilePaths(inputDir string) []string {
 	return paths
 }
 
-func routine(dc chan Display, path string, pattern string) {
+func searchPath(path string, pattern string, wg *sync.WaitGroup, ch chan Display) {
+	defer wg.Done()
+	for _, display := range searchFile(path, pattern) {
+		ch <- display
+	}
+}
+
+func searchFile(path string, pattern string) []Display {
+	var out []Display
 	input := fileFromPath(path)
 	lines := splitIntoLines(input)
 	for index, line := range lines {
 		if searchResult, ok := searchLine(pattern, line, index); ok {
-			dc <- Display{path, searchResult}
+			out = append(out, Display{path, searchResult})
 		}
 	}
+	return out
 }
 
 func main() {
 	pattern := os.Args[1]
 	dirPath := os.Args[2]
-
-	displayChan := make(chan Display)
+	ch := make(chan Display)
+	wg := &sync.WaitGroup{}
 	paths := getRecursiveFilePaths(dirPath)
 
 	for _, path := range paths {
-		go routine(displayChan, path, pattern)
+		wg.Add(1)
+		go searchPath(path, pattern, wg, ch)
 	}
 
-	for {
-		select {
-		case display := <-displayChan:
-			display.PrettyPrint()
-		case <-time.After(100 * time.Millisecond):
-			return
-		}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for d := range ch {
+		d.PrettyPrint()
 	}
 
 }
