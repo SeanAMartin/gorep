@@ -25,22 +25,21 @@ func (d Display) PrettyPrint() {
 	fmt.Printf("Line Number: %v\nFilePath: %v\nLine: %v\n\n", d.lineNumber, d.filePath, d.line)
 }
 
-func getRecursiveFilePaths(inputDir string) []string {
-	var paths []string
+func getRecursiveFilePaths(inputDir string, ch chan string) {
 	err := filepath.Walk(inputDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
 			return err
 		}
 		if !info.IsDir() {
-			paths = append(paths, path)
+			ch <- path
 		}
 		return nil
 	})
 	if err != nil {
 		fmt.Printf("Error walking the path %q: %v\n", inputDir, err)
 	}
-	return paths
+	close(ch)
 }
 
 func searchFile(path string, pattern *regexp.Regexp, wg *sync.WaitGroup, ch chan Display) {
@@ -71,9 +70,11 @@ func main() {
 
 	ch := make(chan Display)
 	wg := &sync.WaitGroup{}
-	paths := getRecursiveFilePaths(dirPath)
+	pathsChan := make(chan string)
 
-	for _, path := range paths {
+	go getRecursiveFilePaths(dirPath, pathsChan)
+
+	for path := range pathsChan {
 		wg.Add(1)
 		go searchFile(path, compiledPattern, wg, ch)
 	}
