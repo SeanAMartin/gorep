@@ -1,13 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -24,28 +23,6 @@ type Display struct {
 
 func (d Display) PrettyPrint() {
 	fmt.Printf("Line Number: %v\nFilePath: %v\nLine: %v\n\n", d.lineNumber, d.filePath, d.line)
-}
-
-func searchLine(pattern string, line string, lineNumber int) (SearchResult, bool) {
-	if strings.Contains(line, pattern) {
-		return SearchResult{lineNumber: lineNumber + 1, line: line}, true
-	}
-	return SearchResult{}, false
-}
-
-func splitIntoLines(file string) []string {
-	lines := strings.Split(file, "\n")
-	return lines
-}
-
-func fileFromPath(path string) string {
-	fileContent, err := ioutil.ReadFile(path)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return string(fileContent)
 }
 
 func getRecursiveFilePaths(inputDir string) []string {
@@ -66,30 +43,31 @@ func getRecursiveFilePaths(inputDir string) []string {
 	return paths
 }
 
-func searchPath(path string, pattern string, wg *sync.WaitGroup, ch chan Display) {
+func searchFile(path string, pattern *regexp.Regexp, wg *sync.WaitGroup, ch chan Display) {
 	defer wg.Done()
-	for _, display := range searchFile(path, pattern) {
-		ch <- display
-	}
-}
 
-func searchFile(path string, pattern string) []Display {
-	var out []Display
-	input := fileFromPath(path)
-	lines := splitIntoLines(input)
-	for index, line := range lines {
-		if searchResult, ok := searchLine(pattern, line, index); ok {
-			out = append(out, Display{path, searchResult})
+	count := 0
+
+	f, _ := os.Open(path)
+	defer f.Close()
+
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		count += 1
+		if pattern.Match(scan.Bytes()) {
+			ch <- Display{path, SearchResult{lineNumber: count, line: scan.Text()}}
 		}
 	}
-	return out
 }
 
 func main() {
 	startTime := time.Now()
 	processed := 0
+
 	pattern := os.Args[1]
 	dirPath := os.Args[2]
+
+	compiledPattern := regexp.MustCompile(pattern)
 
 	ch := make(chan Display)
 	wg := &sync.WaitGroup{}
@@ -97,7 +75,7 @@ func main() {
 
 	for _, path := range paths {
 		wg.Add(1)
-		go searchPath(path, pattern, wg, ch)
+		go searchFile(path, compiledPattern, wg, ch)
 	}
 
 	go func() {
