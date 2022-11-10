@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type SearchResult struct {
@@ -85,8 +86,11 @@ func searchFile(path string, pattern string) []Display {
 }
 
 func main() {
+	startTime := time.Now()
+	processed := 0
 	pattern := os.Args[1]
 	dirPath := os.Args[2]
+
 	ch := make(chan Display)
 	wg := &sync.WaitGroup{}
 	paths := getRecursiveFilePaths(dirPath)
@@ -103,6 +107,9 @@ func main() {
 
 	for d := range ch {
 		d.PrettyPrint()
+		processed += 1
 	}
 
+	elapsed := time.Since(startTime)
+	fmt.Printf("%v results found in %v seconds", processed, elapsed)
 }
